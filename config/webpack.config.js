@@ -29,7 +29,7 @@ const getStyleLoaders = (pre) => {
 }
 
 module.exports = {
-  entry: './src/main.js',
+  entry: './src/index.js',
   output: {
     //开发模式输出到内存里，不需要指定路径 
     //生产模式输出到dist目录下
