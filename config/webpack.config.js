@@ -6,11 +6,13 @@ const CssMinimizerPlugin =require('css-minimizer-webpack-plugin') //css 压缩
 const TerserWebpackPlugin =require('terser-webpack-plugin')
 const ImageMinimizerPlugin =require('image-minimizer-webpack-plugin')
 const CopyPlugin = require("copy-webpack-plugin");
-
+const ReactRefreshWebpackPlugin = require('@pmmmwh/react-refresh-webpack-plugin') //用于react HMR js热更新
+// 获取cross-env定义的环境变量
+const isProduction =process.env.NODE_env==="production"
 // 封装一个函数统一处理css
 const getStyleLoaders = (pre) => {
   return [
-    MiniCssExtractPlugin.loader,
+    isProduction?MiniCssExtractPlugin.loader:'style-loader',
     'css-loader',
     {
       //处理样式兼容性 需要配合package.json中的browserslist使用
@@ -29,11 +31,13 @@ const getStyleLoaders = (pre) => {
 module.exports = {
   entry: './src/main.js',
   output: {
-    path: path.resolve(__dirname, "../dist"), //开发模式输出到内存里，不需要指定路径
-    filename: 'static/js/[name].[contenthash].js',
-    chunkFilename: 'static/js/[name].[contenthash:10].chunk.js',
+    //开发模式输出到内存里，不需要指定路径 
+    //生产模式输出到dist目录下
+    path:isProduction?path.resolve(__dirname, "../dist"):undefined, 
+    filename: isProduction?'static/js/[name].[contenthash].js':'static/js/[name].js',
+    chunkFilename: isProduction?'static/js/[name].[contenthash:10].chunk.js':'static/js/[name].chunk.js',
     assetModuleFilename: 'static/media/[hash:10][ext][query]',
-    clean: true, //清空上一次打包内容
+    clean: true, //生产模式清空上一次打包内容
   },
   module: {
     rules: [
@@ -81,6 +85,7 @@ module.exports = {
         options: {
           cacheDirectory: true, //开启缓存 第二次打包速度更快
           cacheCompression: false, //关闭缓存压缩
+          plugins:[!isProduction&&'react-refresh/babel'].filter(Boolean), //开发模式激活react js的hmr功能
         },
       },
     ],
@@ -101,12 +106,12 @@ module.exports = {
     new HtmlWebpackPlugin({
       template: path.resolve(__dirname, '../public/index.html'),
     }),
-    new MiniCssExtractPlugin({ //将css输出为单独的文件
+    isProduction&&new MiniCssExtractPlugin({ //生产模式下将css输出为单独的文件
         filename:'static/css/[name].[contenthash:10].css',
         chunkFilename:'static/css/[name].[contenthash:10].chunk.css',
     }),
-    // 将public文件copy到dist目录下，用于处理图标等静态资源
-    new CopyPlugin({
+    // 生产模式下将public文件copy到dist目录下，用于处理图标等静态资源
+    isProduction&&new CopyPlugin({
         patterns: [
           { from: path.resolve(__dirname,"../public"), to: path.resolve(__dirname,"../dist"),
           globOptions: {
@@ -115,10 +120,11 @@ module.exports = {
           }, },
         ],
       }),
-  ],
-  //指定模式为生产模式
-  mode: 'production',
-  devtool: 'source-map',
+      !isProduction&&new ReactRefreshWebpackPlugin() //开发模式调用react hmr插件
+  ].filter(Boolean),
+  //指定模式
+  mode: isProduction?'production':'development',
+  devtool: isProduction?'source-map':'cheap-module-source-map',
   // 为了打包体积考虑，不要将所有代码都打包到一个文件中，而是打包为多个chunk
   optimization: {
     splitChunks: {
@@ -127,6 +133,8 @@ module.exports = {
     runtimeChunk: {
       name: (entrypoint) => `runtime~${entrypoint.name}.js`,
     },
+    // 是否需要进行压缩
+    minimize:isProduction,
     minimizer:[new CssMinimizerPlugin(),new TerserWebpackPlugin()  , new ImageMinimizerPlugin({
         minimizer: {
           implementation: ImageMinimizerPlugin.imageminGenerate,
@@ -160,4 +168,12 @@ module.exports = {
     // 自动补全文件扩展名
     extensions: ['.jsx', '.js', '.json'],
   },
+    // 配置开发模式下打开的服务器 通过package.json是否指定serve指令判断是否激活devServer
+    devServer:{
+        host:"localhost",
+        port: 3000,
+        open:true,
+        hot:true, //开启热模块替换
+        historyApiFallback:true, //解决前端路由刷新显示404问题
+      }
 }
